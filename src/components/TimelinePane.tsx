@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { formatTimecode } from '../calibration'
 import type { ConsoleAction } from '../consoleReducer'
 import type { ConsoleState, SubtitleSegment } from '../types'
-import { seqRange } from '../selectors'
+import { calibratedSegments, seqRange, type CalibratedSegment } from '../selectors'
 
 interface TimelinePaneProps {
   state: ConsoleState
@@ -12,6 +13,12 @@ interface TimelinePaneProps {
 /** 字幕时间线：按序号排列，缺口占位、可编辑、可锁定。 */
 export function TimelinePane({ state, onAirSeq, dispatch }: TimelinePaneProps) {
   const rows = seqRange(state)
+  // 有校准方案时，每行额外展示校准后的节目时间（晚到补齐会自动重算）
+  const calibBySeq = new Map(
+    (state.anchors.length > 0 ? calibratedSegments(state) : []).map(
+      (c) => [c.seg.seq, c] as const,
+    ),
+  )
   return (
     <section className="pane timeline-pane" aria-label="字幕时间线">
       <h2>
@@ -30,6 +37,7 @@ export function TimelinePane({ state, onAirSeq, dispatch }: TimelinePaneProps) {
                 seg={seg}
                 isOnAir={seq === onAirSeq}
                 hasConflict={state.conflicts.some((c) => c.seq === seq)}
+                calib={calibBySeq.get(seq) ?? null}
                 dispatch={dispatch}
               />
             )
@@ -55,10 +63,11 @@ interface SegmentRowProps {
   seg: SubtitleSegment
   isOnAir: boolean
   hasConflict: boolean
+  calib: CalibratedSegment | null
   dispatch: (action: ConsoleAction) => void
 }
 
-function SegmentRow({ seg, isOnAir, hasConflict, dispatch }: SegmentRowProps) {
+function SegmentRow({ seg, isOnAir, hasConflict, calib, dispatch }: SegmentRowProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(seg.text)
 
@@ -85,6 +94,14 @@ function SegmentRow({ seg, isOnAir, hasConflict, dispatch }: SegmentRowProps) {
         <span className={`chip ${seg.origin === 'manual' ? 'chip--manual' : ''}`}>
           {seg.origin === 'manual' ? '✍️ 人工' : '🤖 机器'}
         </span>
+        <span className="chip chip--time" title="字幕机源时钟入点–出点">
+          ⏱ 源 {formatTimecode(seg.srcIn)}–{formatTimecode(seg.srcOut)}
+        </span>
+        {calib && (
+          <span className="chip chip--calib" title="校准后的节目时间入点–出点">
+            → 节目 {formatTimecode(calib.progIn)}–{formatTimecode(calib.progOut)}
+          </span>
+        )}
         {isOnAir && <span className="chip chip--live">▶ 播出中</span>}
         {seg.locked && <span className="chip chip--locked">🔒 已锁定</span>}
         {hasConflict && <span className="chip chip--danger">⚠️ 冲突待裁决</span>}

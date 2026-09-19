@@ -1,4 +1,6 @@
+import { sortAnchors, validateAnchors } from './calibration'
 import type {
+  CalibrationAnchor,
   Conflict,
   ConsoleState,
   LogKind,
@@ -16,6 +18,8 @@ export type ConsoleAction =
   | { type: 'edit'; seq: number; text: string }
   | { type: 'toggle-lock'; seq: number }
   | { type: 'resolve-conflict'; seq: number; choice: 'keep' | 'accept' }
+  | { type: 'set-anchors'; anchors: CalibrationAnchor[] }
+  | { type: 'remove-anchor'; seq: number }
   | { type: 'reset' }
 
 export function createInitialState(): ConsoleState {
@@ -25,6 +29,7 @@ export function createInitialState(): ConsoleState {
     conflicts: [],
     log: [],
     nextLogId: 1,
+    anchors: [],
   }
 }
 
@@ -49,11 +54,42 @@ function withLog(
 export function consoleReducer(state: ConsoleState, action: ConsoleAction): ConsoleState {
   switch (action.type) {
     case 'reset':
-      // 重放必须回到一尘不染的初始状态，不留任何上一轮的痕迹
-      return createInitialState()
+      // 重放清空全部事件数据（片段 / 去重记录 / 冲突 / 日志），回到干净状态；
+      // 校准锚点属于控制台配置（与播放器倍速同理），跨重放保留，
+      // 并会持久化到浏览器本地——重放事件流不改变源时钟的漂移。
+      return { ...createInitialState(), anchors: state.anchors }
 
     case 'ingest':
       return ingest(state, action.event, action.receivedAt)
+
+    case 'set-anchors': {
+      // 非法锚点（源时间/节目时间未严格递增等）不得覆盖当前有效方案，
+      // 仅在事件流中记录冲突位置，当前方案原样保留。
+      const issues = validateAnchors(action.anchors)
+      if (issues.length > 0) {
+        return withLog(
+          state,
+          'calibration',
+          null,
+          null,
+          `校准方案未通过校验，已保留当前方案：${issues.map((issue) => issue.message).join('；')}`,
+        )
+      }
+      const anchors = sortAnchors(action.anchors)
+      const s = { ...state, anchors }
+      const summary =
+        anchors.length === 0
+          ? '校准方案已清空，字幕按源时间原样显示'
+          : `校准方案已更新：${anchors.length} 个锚点（${anchors.map((a) => `#${a.seq}`).join('、')}）`
+      return withLog(s, 'calibration', null, null, summary)
+    }
+
+    case 'remove-anchor': {
+      if (!state.anchors.some((a) => a.seq === action.seq)) return state
+      const anchors = state.anchors.filter((a) => a.seq !== action.seq)
+      const s = { ...state, anchors }
+      return withLog(s, 'calibration', null, null, `已移除 #${action.seq} 的校准锚点`)
+    }
 
     case 'edit': {
       const seg = state.segments[action.seq]
@@ -147,6 +183,8 @@ function ingest(
       version: event.version,
       origin: 'machine',
       locked: false,
+      srcIn: event.srcIn,
+      srcOut: event.srcOut,
     }
     const keys = Object.keys(state.segments)
     const maxSeq = keys.length > 0 ? Math.max(...keys.map(Number)) : null
@@ -211,7 +249,8 @@ function ingest(
     )
   }
 
-  // 未锁定：直接应用修订；若该片段曾有悬而未决的冲突，旧冲突随之失效
+  // 未锁定：直接应用修订；若该片段曾有悬而未决的冲突，旧冲突随之失效。
+  // 锚点按字幕序号绑定（state.anchors 不动），修订不影响校准方案。
   const hadManualText = existing.origin === 'manual'
   const droppedConflict = state.conflicts.some((c) => c.seq === event.seq)
   const conflicts = state.conflicts.filter((c) => c.seq !== event.seq)
@@ -220,6 +259,8 @@ function ingest(
     text: event.text,
     version: event.version,
     origin: 'machine',
+    srcIn: event.srcIn,
+    srcOut: event.srcOut,
   }
   const s = { ...s0, conflicts, segments: { ...state.segments, [event.seq]: next } }
   const notes = [

@@ -4,15 +4,17 @@ import { SCENARIO } from '../scenario'
 import { gaps, onAirSeq, sortedSegments } from '../selectors'
 import type { ConsoleState, SubtitleEvent } from '../types'
 
-/** 构造一条机器事件 */
+/** 构造一条机器事件（默认按序号生成确定性的源入点/出点） */
 function ev(
   id: string,
   seq: number,
   version: number,
   text: string,
   kind: 'create' | 'revision' = 'create',
+  srcIn = seq * 1000,
+  srcOut = seq * 1000 + 2000,
 ): SubtitleEvent {
-  return { id, seq, version, kind, text }
+  return { id, seq, version, kind, text, srcIn, srcOut }
 }
 
 function ingest(event: SubtitleEvent, receivedAt: number | null = null): ConsoleAction {

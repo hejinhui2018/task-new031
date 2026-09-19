@@ -10,6 +10,7 @@ const KIND_META: Record<LogKind, { icon: string; label: string; className: strin
   manual: { icon: '✍️', label: '人工修改', className: 'log--manual' },
   lock: { icon: '🔒', label: '锁定', className: 'log--manual' },
   resolved: { icon: '✅', label: '裁决', className: 'log--ok' },
+  calibration: { icon: '⏱️', label: '校准', className: 'log--info' },
 }
 
 /** 事件流：所有接收与裁决动作的审计记录，最新在最上。 */

@@ -14,6 +14,7 @@ import { PreviewPane } from './components/PreviewPane'
 import { TimelinePane } from './components/TimelinePane'
 import { EventLogPane } from './components/EventLogPane'
 import { ConflictPanel } from './components/ConflictPanel'
+import { CalibrationPanel } from './components/CalibrationPanel'
 import { PlaybackControls } from './components/PlaybackControls'
 
 export default function App() {
@@ -38,6 +39,7 @@ export default function App() {
         <TimelinePane state={state} onAirSeq={onAirSeq(state)} dispatch={dispatch} />
         <EventLogPane log={state.log} />
       </main>
+      <CalibrationPanel state={state} dispatch={dispatch} />
       <PlaybackControls player={player} />
     </div>
   )

@@ -18,6 +18,10 @@ export interface SubtitleEvent {
   version: number
   kind: EventKind
   text: string
+  /** 源入点：字幕机源时钟上的出现时刻（毫秒） */
+  srcIn: number
+  /** 源出点：字幕机源时钟上的消失时刻（毫秒） */
+  srcOut: number
 }
 
 /** 场景脚本中的一条：在 at 毫秒时投递 event */
@@ -37,6 +41,23 @@ export interface SubtitleSegment {
   origin: SegmentOrigin
   /** 锁定后机器修订不再静默覆盖，转入人工裁决 */
   locked: boolean
+  /** 源入点（字幕机源时钟，毫秒） */
+  srcIn: number
+  /** 源出点（字幕机源时钟，毫秒） */
+  srcOut: number
+}
+
+/**
+ * 校准锚点：把某条字幕（按序号绑定）的源入点对齐到导播台节目时间码。
+ * 锚点之间分段线性映射，范围外沿最近一段外推（见 calibration.ts）。
+ */
+export interface CalibrationAnchor {
+  /** 绑定的字幕序号（片段收到修订后锚点依然保留） */
+  seq: number
+  /** 录入锚点时片段的源入点（毫秒） */
+  srcAt: number
+  /** 运营录入的节目时间码（毫秒） */
+  programAt: number
 }
 
 /** 一条待裁决冲突：锁定片段收到了更新的机器版本 */
@@ -60,6 +81,7 @@ export type LogKind =
   | 'manual' // 人工修改
   | 'lock' // 锁定 / 解锁
   | 'resolved' // 冲突已裁决
+  | 'calibration' // 校准方案更新 / 非法方案被拒
 
 export interface LogEntry {
   id: number
@@ -78,4 +100,9 @@ export interface ConsoleState {
   conflicts: Conflict[]
   log: LogEntry[]
   nextLogId: number
+  /**
+   * 校准锚点（按源时间升序）。属于控制台配置而非事件数据：
+   * reset 重放时保留（与播放器倍速同理），并持久化到浏览器本地。
+   */
+  anchors: CalibrationAnchor[]
 }

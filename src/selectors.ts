@@ -1,3 +1,4 @@
+import { mapSourceToProgram, offsetAt } from './calibration'
 import type { ConsoleState, SubtitleSegment } from './types'
 
 /** 派生数据选择器：全部由状态计算，不额外存储，保证 reset 后无残留。 */
@@ -58,4 +59,40 @@ export function lockedCount(state: ConsoleState): number {
 
 export function duplicateCount(state: ConsoleState): number {
   return state.log.filter((entry) => entry.kind === 'duplicate').length
+}
+
+/**
+ * 片段的校准后节目时间区间与当前偏移。
+ * 由「片段源时间 + 当前锚点」实时推导——晚到补齐、修订、锚点增删都会自动重算。
+ */
+export interface CalibratedSegment {
+  seg: SubtitleSegment
+  /** 校准后的节目入点（毫秒） */
+  progIn: number
+  /** 校准后的节目出点（毫秒） */
+  progOut: number
+  /** 该片段源入点处的当前偏移（节目 − 源，毫秒） */
+  offsetMs: number
+}
+
+export function calibratedSegments(state: ConsoleState): CalibratedSegment[] {
+  return sortedSegments(state).map((seg) => ({
+    seg,
+    progIn: mapSourceToProgram(state.anchors, seg.srcIn),
+    progOut: mapSourceToProgram(state.anchors, seg.srcOut),
+    offsetMs: offsetAt(state.anchors, seg.srcIn),
+  }))
+}
+
+/**
+ * 节目时间轴上 programMs 时刻正在播出的片段（progIn ≤ t < progOut）。
+ * 落在片段间隙（该时刻无字幕）时返回 null。
+ */
+export function segmentAtProgramTime(
+  state: ConsoleState,
+  programMs: number,
+): CalibratedSegment | null {
+  return (
+    calibratedSegments(state).find((c) => programMs >= c.progIn && programMs < c.progOut) ?? null
+  )
 }
