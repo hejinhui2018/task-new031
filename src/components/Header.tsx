@@ -4,6 +4,7 @@ interface HeaderProps {
   duplicateCount: number
   conflictCount: number
   lockedCount: number
+  anchorCount: number
 }
 
 /** 顶栏：台标、LIVE 标识与关键指标。所有指标均为 图标+文字+数字，不依赖颜色区分。 */
@@ -36,6 +37,9 @@ export function Header(props: HeaderProps) {
         </span>
         <span className={`stat${props.lockedCount > 0 ? ' stat--manual' : ''}`}>
           <span aria-hidden="true">🔒</span> 锁定 <strong>{props.lockedCount}</strong>
+        </span>
+        <span className={`stat${props.anchorCount >= 2 ? ' stat--ok' : ''}`}>
+          <span aria-hidden="true">⚓</span> 锚点 <strong>{props.anchorCount}</strong>
         </span>
       </div>
     </header>

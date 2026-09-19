@@ -162,6 +162,15 @@ body {
   color: var(--manual);
 }
 
+.stat--ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.stat--ok strong {
+  color: var(--ok);
+}
+
 /* ===== 三栏布局 ===== */
 
 .grid {
@@ -346,6 +355,11 @@ body {
   font-weight: 700;
 }
 
+.chip--time {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 10.5px;
+}
+
 /* ===== 字幕时间线 ===== */
 
 .timeline {
@@ -484,6 +498,10 @@ body {
 .log--muted {
   border-left-color: var(--muted);
   opacity: 0.75;
+}
+
+.log--cal {
+  border-left-color: var(--manual);
 }
 
 .log-icon {
@@ -707,6 +725,321 @@ button[aria-pressed='true'] {
   padding-top: 8px;
 }
 
+/* ===== 时钟漂移校准面板 ===== */
+
+.calibration-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.cal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.cal-header h2 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+.cal-status {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.cal-status--on {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.cal-status--off {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.cal-toggle {
+  margin-left: auto;
+}
+
+.cal-error {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  background: rgba(248, 81, 73, 0.08);
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.cal-body {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: minmax(280px, 1.1fr) minmax(300px, 1.3fr) minmax(280px, 1fr);
+  gap: 16px;
+}
+
+.cal-col h3,
+.cal-preview h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.anchor-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.anchor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-deep);
+  font-size: 12.5px;
+}
+
+.anchor-src {
+  color: var(--muted);
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.anchor-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.anchor-input input,
+.anchor-form input {
+  width: 90px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.anchor-input input:focus,
+.anchor-form input:focus,
+.anchor-form select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.anchor-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.anchor-form select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.cal-clear {
+  margin-top: 8px;
+}
+
+/* 漂移曲线 */
+
+.drift-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.drift-empty {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.drift-frame {
+  fill: var(--panel-deep);
+  stroke: var(--border);
+}
+
+.drift-zero {
+  stroke: var(--muted);
+  stroke-dasharray: 4 4;
+  stroke-width: 1;
+}
+
+.drift-tail {
+  stroke: var(--accent);
+  stroke-dasharray: 5 4;
+  stroke-width: 1.5;
+  opacity: 0.7;
+}
+
+.drift-main {
+  stroke: var(--accent);
+  stroke-width: 2;
+  fill: none;
+}
+
+.drift-dot {
+  fill: var(--accent);
+  stroke: var(--bg);
+  stroke-width: 1.5;
+}
+
+.drift-label {
+  fill: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.drift-tick {
+  fill: var(--muted);
+  font-size: 10px;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+
+.drift-axis {
+  fill: var(--muted);
+  font-size: 10.5px;
+}
+
+/* 校准对照表 */
+
+.cal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: 'SF Mono', Consolas, monospace;
+}
+
+.cal-table th,
+.cal-table td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.cal-table th {
+  color: var(--muted);
+  font-weight: 600;
+  background: var(--panel-deep);
+}
+
+.cal-table tr.is-anchor td {
+  background: rgba(88, 166, 255, 0.07);
+}
+
+.cal-table .has-drift {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+/* 播放头预览 */
+
+.cal-preview {
+  margin-top: 12px;
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+}
+
+.playhead-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.playhead-time {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.playhead-row input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+  cursor: grab;
+}
+
+.play-strip {
+  position: relative;
+  height: 30px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-deep);
+  overflow: hidden;
+}
+
+.play-block {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: rgba(88, 166, 255, 0.14);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.play-block--hit {
+  background: rgba(248, 81, 73, 0.2);
+  border-color: var(--live);
+  color: var(--live);
+}
+
+.play-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--live);
+  box-shadow: 0 0 6px rgba(248, 81, 73, 0.8);
+}
+
+.play-readout {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+}
+
 /* ===== 响应式 ===== */
 
 @media (max-width: 1100px) {
@@ -721,5 +1054,13 @@ button[aria-pressed='true'] {
 
   .pane {
     max-height: 60vh;
+  }
+
+  .cal-body {
+    grid-template-columns: 1fr;
+  }
+
+  .calibration-panel {
+    max-height: none;
   }
 }

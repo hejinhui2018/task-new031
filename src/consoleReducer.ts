@@ -1,4 +1,6 @@
+import { anchorPoints, formatSec, validateAnchorPoints } from './calibration'
 import type {
+  CalibrationAnchor,
   Conflict,
   ConsoleState,
   LogKind,
@@ -16,6 +18,11 @@ export type ConsoleAction =
   | { type: 'edit'; seq: number; text: string }
   | { type: 'toggle-lock'; seq: number }
   | { type: 'resolve-conflict'; seq: number; choice: 'keep' | 'accept' }
+  | { type: 'upsert-anchor'; seq: number; programAt: number }
+  | { type: 'remove-anchor'; seq: number }
+  | { type: 'clear-anchors' }
+  | { type: 'set-playhead'; at: number }
+  | { type: 'restore-calibration'; anchors: CalibrationAnchor[]; playheadMs: number }
   | { type: 'reset' }
 
 export function createInitialState(): ConsoleState {
@@ -25,6 +32,9 @@ export function createInitialState(): ConsoleState {
     conflicts: [],
     log: [],
     nextLogId: 1,
+    anchors: [],
+    calibrationError: null,
+    playheadMs: 0,
   }
 }
 
@@ -49,8 +59,13 @@ function withLog(
 export function consoleReducer(state: ConsoleState, action: ConsoleAction): ConsoleState {
   switch (action.type) {
     case 'reset':
-      // 重放必须回到一尘不染的初始状态，不留任何上一轮的痕迹
-      return createInitialState()
+      // 重放清空事件流状态，回到一尘不染的初始状态；
+      // 但校准锚点与播放头是会话级设置（描述时钟关系，与事件流无关），重放时保留。
+      return {
+        ...createInitialState(),
+        anchors: state.anchors,
+        playheadMs: state.playheadMs,
+      }
 
     case 'ingest':
       return ingest(state, action.event, action.receivedAt)
@@ -100,12 +115,14 @@ export function consoleReducer(state: ConsoleState, action: ConsoleAction): Cons
           `保留人工版本，忽略机器修订 v${conflict.incomingVersion}（#${action.seq}）`,
         )
       }
-      // 接受机器版本：应用新内容并解除锁定，片段交还给机器流
+      // 接受机器版本：应用新内容与源时间并解除锁定，片段交还给机器流
       if (!seg) return { ...state, conflicts }
       const next: SubtitleSegment = {
         ...seg,
         text: conflict.incomingText,
         version: conflict.incomingVersion,
+        sourceIn: conflict.incomingSourceIn,
+        sourceOut: conflict.incomingSourceOut,
         origin: 'machine',
         locked: false,
       }
@@ -118,7 +135,119 @@ export function consoleReducer(state: ConsoleState, action: ConsoleAction): Cons
         `接受机器修订 v${conflict.incomingVersion}（#${action.seq}），片段解除锁定`,
       )
     }
+
+    case 'upsert-anchor': {
+      const seg = state.segments[action.seq]
+      if (!seg) {
+        return rejectCalibration(
+          state,
+          action.seq,
+          `片段 #${action.seq} 尚未到达，无法作为锚点`,
+        )
+      }
+      if (!Number.isFinite(action.programAt) || action.programAt < 0) {
+        return rejectCalibration(
+          state,
+          action.seq,
+          `节目时间码无效（必须是不小于 0 的毫秒数）：${String(action.programAt)}`,
+        )
+      }
+      // 同序号只保留一条锚点：重复设置视为更新，绝不产生副本
+      const candidate: CalibrationAnchor[] = [
+        ...state.anchors.filter((a) => a.seq !== action.seq),
+        { seq: action.seq, programAt: action.programAt },
+      ]
+      // 校验合并后的完整方案（休眠锚点不参与）；非法时保留当前有效方案
+      const conflicts = validateAnchorPoints(anchorPoints(candidate, state.segments))
+      if (conflicts.length > 0) {
+        return rejectCalibration(
+          state,
+          action.seq,
+          conflicts.map((c) => c.message).join('；'),
+        )
+      }
+      const s: ConsoleState = { ...state, anchors: candidate, calibrationError: null }
+      return withLog(
+        s,
+        'calibration',
+        action.seq,
+        null,
+        `校准锚点已更新：#${action.seq} → 节目时间 ${formatSec(action.programAt)}` +
+          `（当前共 ${candidate.length} 个锚点）`,
+      )
+    }
+
+    case 'remove-anchor': {
+      if (!state.anchors.some((a) => a.seq === action.seq)) return state
+      const anchors = state.anchors.filter((a) => a.seq !== action.seq)
+      const s: ConsoleState = { ...state, anchors, calibrationError: null }
+      return withLog(
+        s,
+        'calibration',
+        action.seq,
+        null,
+        `已移除校准锚点 #${action.seq}（剩余 ${anchors.length} 个）`,
+      )
+    }
+
+    case 'clear-anchors': {
+      if (state.anchors.length === 0) return state
+      const s: ConsoleState = { ...state, anchors: [], calibrationError: null }
+      return withLog(s, 'calibration', null, null, '已清除全部校准锚点，校准映射停用')
+    }
+
+    case 'set-playhead': {
+      if (!Number.isFinite(action.at)) return state
+      const playheadMs = Math.max(0, action.at)
+      if (playheadMs === state.playheadMs) return state
+      // 播放头拖动是高频预览操作，不写入事件流
+      return { ...state, playheadMs }
+    }
+
+    case 'restore-calibration': {
+      // 启动时从浏览器本地恢复。数据在保存时已通过校验，这里只做形状清洗：
+      // 过滤非法条目、按序号去重（同序号后者覆盖前者），休眠锚点原样保留。
+      const bySeq = new Map<number, number>()
+      for (const anchor of action.anchors) {
+        if (
+          anchor &&
+          Number.isInteger(anchor.seq) &&
+          Number.isFinite(anchor.programAt) &&
+          anchor.programAt >= 0
+        ) {
+          bySeq.set(anchor.seq, anchor.programAt)
+        }
+      }
+      const anchors: CalibrationAnchor[] = [...bySeq.entries()].map(([seq, programAt]) => ({
+        seq,
+        programAt,
+      }))
+      const playheadMs =
+        Number.isFinite(action.playheadMs) && action.playheadMs >= 0 ? action.playheadMs : 0
+      // 幂等：StrictMode 双挂载或重复恢复相同数据时不产生额外日志
+      const sameAnchors =
+        anchors.length === state.anchors.length &&
+        anchors.every(
+          (a) => state.anchors.some((b) => b.seq === a.seq && b.programAt === a.programAt),
+        )
+      if (sameAnchors && playheadMs === state.playheadMs) return state
+      const s: ConsoleState = { ...state, anchors, playheadMs, calibrationError: null }
+      if (anchors.length === 0) return s
+      return withLog(
+        s,
+        'calibration',
+        null,
+        null,
+        `已从浏览器本地恢复校准方案（${anchors.length} 个锚点）`,
+      )
+    }
   }
+}
+
+/** 非法锚点：保留当前有效方案，仅记录拒绝原因（含冲突位置） */
+function rejectCalibration(state: ConsoleState, seq: number, reason: string): ConsoleState {
+  const s: ConsoleState = { ...state, calibrationError: reason }
+  return withLog(s, 'calibration', seq, null, `非法锚点被拒绝（保留当前校准方案）：${reason}`)
 }
 
 function ingest(
@@ -147,6 +276,8 @@ function ingest(
       version: event.version,
       origin: 'machine',
       locked: false,
+      sourceIn: event.sourceIn,
+      sourceOut: event.sourceOut,
     }
     const keys = Object.keys(state.segments)
     const maxSeq = keys.length > 0 ? Math.max(...keys.map(Number)) : null
@@ -198,6 +329,8 @@ function ingest(
       manualVersion: existing.version,
       incomingText: event.text,
       incomingVersion: event.version,
+      incomingSourceIn: event.sourceIn,
+      incomingSourceOut: event.sourceOut,
       receivedAt,
     }
     const conflicts = [...state.conflicts.filter((c) => c.seq !== event.seq), conflict]
@@ -211,7 +344,7 @@ function ingest(
     )
   }
 
-  // 未锁定：直接应用修订；若该片段曾有悬而未决的冲突，旧冲突随之失效
+  // 未锁定：直接应用修订（含源时间）；若该片段曾有悬而未决的冲突，旧冲突随之失效
   const hadManualText = existing.origin === 'manual'
   const droppedConflict = state.conflicts.some((c) => c.seq === event.seq)
   const conflicts = state.conflicts.filter((c) => c.seq !== event.seq)
@@ -219,6 +352,8 @@ function ingest(
     ...existing,
     text: event.text,
     version: event.version,
+    sourceIn: event.sourceIn,
+    sourceOut: event.sourceOut,
     origin: 'machine',
   }
   const s = { ...s0, conflicts, segments: { ...state.segments, [event.seq]: next } }

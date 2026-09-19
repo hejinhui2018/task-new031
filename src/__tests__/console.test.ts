@@ -11,8 +11,10 @@ function ev(
   version: number,
   text: string,
   kind: 'create' | 'revision' = 'create',
+  sourceIn = 0,
+  sourceOut = 1000,
 ): SubtitleEvent {
-  return { id, seq, version, kind, text }
+  return { id, seq, version, kind, text, sourceIn, sourceOut }
 }
 
 function ingest(event: SubtitleEvent, receivedAt: number | null = null): ConsoleAction {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { formatSec } from '../calibration'
 import type { ConsoleAction } from '../consoleReducer'
 import type { ConsoleState, SubtitleSegment } from '../types'
 import { seqRange } from '../selectors'
@@ -84,6 +85,9 @@ function SegmentRow({ seg, isOnAir, hasConflict, dispatch }: SegmentRowProps) {
         <span className="chip">v{seg.version}</span>
         <span className={`chip ${seg.origin === 'manual' ? 'chip--manual' : ''}`}>
           {seg.origin === 'manual' ? '✍️ 人工' : '🤖 机器'}
+        </span>
+        <span className="chip chip--time">
+          ⏱ 源 {formatSec(seg.sourceIn)}–{formatSec(seg.sourceOut)}
         </span>
         {isOnAir && <span className="chip chip--live">▶ 播出中</span>}
         {seg.locked && <span className="chip chip--locked">🔒 已锁定</span>}

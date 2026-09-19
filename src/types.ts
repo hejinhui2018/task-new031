@@ -1,5 +1,5 @@
 /**
- * 领域模型：字幕事件、字幕片段、冲突、事件日志。
+ * 领域模型：字幕事件、字幕片段、冲突、校准锚点、事件日志。
  *
  * 所有时间均为“逻辑时间”（相对场景开始的毫秒数），由事件/动作携带，
  * 状态层本身从不读取时钟，保证可稳定重放。
@@ -18,6 +18,10 @@ export interface SubtitleEvent {
   version: number
   kind: EventKind
   text: string
+  /** 源入点：字幕机时钟上本条字幕的开始时刻（毫秒） */
+  sourceIn: number
+  /** 源出点：字幕机时钟上本条字幕的结束时刻（毫秒） */
+  sourceOut: number
 }
 
 /** 场景脚本中的一条：在 at 毫秒时投递 event */
@@ -37,6 +41,10 @@ export interface SubtitleSegment {
   origin: SegmentOrigin
   /** 锁定后机器修订不再静默覆盖，转入人工裁决 */
   locked: boolean
+  /** 源入点（字幕机时钟，毫秒），随机器修订更新 */
+  sourceIn: number
+  /** 源出点（字幕机时钟，毫秒），随机器修订更新 */
+  sourceOut: number
 }
 
 /** 一条待裁决冲突：锁定片段收到了更新的机器版本 */
@@ -47,7 +55,24 @@ export interface Conflict {
   manualVersion: number
   incomingText: string
   incomingVersion: number
+  /** 机器修订携带的源入点（裁决「接受机器」时一并应用） */
+  incomingSourceIn: number
+  /** 机器修订携带的源出点 */
+  incomingSourceOut: number
   receivedAt: number | null
+}
+
+/**
+ * 校准锚点：运营确认“片段 #seq 实际播出在节目时间的 programAt 毫秒”。
+ *
+ * 锚点按字幕序号绑定，不随事件 ID 或版本变化：
+ * - 同一片段收到更高版本修订后锚点保留，源时间自动跟随片段当前的源入点；
+ * - 重复事件不会产生第二个锚点（同序号只保留一条）。
+ */
+export interface CalibrationAnchor {
+  seq: number
+  /** 节目时钟时间码（毫秒），由运营录入 */
+  programAt: number
 }
 
 export type LogKind =
@@ -60,6 +85,7 @@ export type LogKind =
   | 'manual' // 人工修改
   | 'lock' // 锁定 / 解锁
   | 'resolved' // 冲突已裁决
+  | 'calibration' // 校准锚点更新 / 非法锚点被拒绝
 
 export interface LogEntry {
   id: number
@@ -70,7 +96,13 @@ export interface LogEntry {
   message: string
 }
 
-/** 控制台全部状态。纯数据、可深比较，reset 后必须与初始状态完全一致。 */
+/**
+ * 控制台全部状态。纯数据、可深比较。
+ *
+ * 其中 anchors / playheadMs 是“会话级”设置：它们描述的是字幕机时钟与
+ * 节目时钟的关系以及运营正在查看的预览位置，与事件流内容无关——
+ * 因此 reset（重放）会清空事件流状态，但保留这两项（并持久化到浏览器本地）。
+ */
 export interface ConsoleState {
   segments: Record<number, SubtitleSegment>
   /** 已见过的事件 ID 集合，用于事件级去重 */
@@ -78,4 +110,10 @@ export interface ConsoleState {
   conflicts: Conflict[]
   log: LogEntry[]
   nextLogId: number
+  /** 校准锚点（按序号绑定；源时间由片段当前源入点派生，不冗余存储） */
+  anchors: CalibrationAnchor[]
+  /** 最近一次非法锚点被拒绝的原因（含冲突位置）；成功操作后清除 */
+  calibrationError: string | null
+  /** 校准预览播放头位置（节目时间轴，毫秒） */
+  playheadMs: number
 }
